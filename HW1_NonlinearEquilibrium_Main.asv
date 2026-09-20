@@ -1,0 +1,58 @@
+clear;
+clc;
+
+%% Problem Definition
+internalForceFunction = @(u) 10 * u + 10 * u.^3;
+exactTangentFunction = @(u) 10 + 30 * u.^2;
+
+%% Solver Settings
+options.finalLoad = 20;
+options.initialDisplacement = 0;
+options.numberOfLoadSteps = 5;
+options.methods = ["exact", "modified", "secant", "numerical"];
+options.residualTolerance = 1e-8;
+options.maximumIterations = 50;
+options.numericalPerturbation = 1e-5;
+ 
+%% Display / Plot Settings
+options.displayIterations = false;
+options.showLiveNewtonPlot = false;
+options.livePlotPause = 2;
+options.outputFile = "HW1_NonlinearEquilibrium_Results_2_load_step.mat";
+plotOptions.showForceDisplacement = false;
+plotOptions.showResidualHistory = true;
+plotOptions.showCorrectionHistory = false;
+plotOptions.showMethodComparison = false;
+plotOptions.showNewtonIterationPaths = false;
+
+%% Run Solver
+results = struct();
+for methodIndex = 1:numel(options.methods)
+    methodName = options.methods(methodIndex);
+    results.(methodName) = solveScalarNonlinearEquilibrium( ...
+        internalForceFunction, exactTangentFunction, options, methodName);
+end
+
+%% Save Results
+save(options.outputFile, 'results', 'options', 'plotOptions');
+
+fprintf('\nSaved results to %s\n', options.outputFile);
+fprintf('\nSummary\n');
+fprintf('Method       Status       Final u             Iterations  Corrections  Residual\n');
+fprintf('-------------------------------------------------------------------------------\n');
+for methodIndex = 1:numel(options.methods)
+    methodName = options.methods(methodIndex);
+    methodResult = results.(methodName);
+    if methodResult.converged
+        statusText = 'converged';
+    else
+        statusText = 'failed';
+    end
+    fprintf('%-12s %-12s %-18.10g %-11d %-12d %.6e\n', ...
+        methodName, statusText, methodResult.finalDisplacement, ...
+        methodResult.numberOfIterations, methodResult.numberOfCorrections, ...
+        methodResult.finalAbsoluteResidual);
+end
+
+%% Final Plots
+%plotNonlinearResults(results, internalForceFunction, plotOptions);
