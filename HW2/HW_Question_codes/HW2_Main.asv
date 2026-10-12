@@ -1,0 +1,128 @@
+%% ================================================================
+% MECH 6140 - HW2
+% Finite Deformation Kinematics
+% ================================================================
+
+clear;
+clc;
+
+%% Reference nodal coordinates
+% Format:
+% [X1 Y1
+%  X2 Y2
+%  X3 Y3
+%  X4 Y4]
+
+Nodal_Locations = [ ...
+    0 0;
+    2 0;
+    2 1;
+    0 1];
+
+%% Natural coordinates of Q4 nodes
+
+xi_cordi_4N = [ ...
+   -1 -1;
+    1 -1;
+    1  1;
+   -1  1];
+
+%% Shape function derivative
+
+ShapeFun_derivative = @Derivative_Of_ShapeFun_4Noded;
+
+% %% Prescribed displacement field
+
+% RIGID
+% u = @(X,Y) 0.25;
+% v = @(X,Y) -0.10;
+
+% % ROTATION
+% theta = 30;   % degrees
+% 
+% u = @(X,Y) cosd(theta)*X - sind(theta)*Y - X;
+% 
+% v = @(X,Y) sind(theta)*X + cosd(theta)*Y - Y;
+
+% SIMPLE STRECH
+u = @(X,Y) 1.2X;
+v = @(X,Y) -0.10;
+
+%% Calculate prescribed nodal displacements
+
+q = Prescribed_Nodal_Displacements_cal( ...
+    Nodal_Locations,u,v);
+
+%% Calculate current nodal coordinates
+% x = X + u
+
+Current_Nodal_Locations = zeros(size(Nodal_Locations));
+
+Current_Nodal_Locations(:,1) = ...
+    Nodal_Locations(:,1) + q(1:2:end);
+
+Current_Nodal_Locations(:,2) = ...
+    Nodal_Locations(:,2) + q(2:2:end);
+
+%% Convert reference coordinates to old x_cap format
+% [X1;Y1;X2;Y2;...]
+
+x_cap = X_2_to_X_1converter(Nodal_Locations);
+
+%% Location to evaluate kinematics
+% Start at element center for testing
+
+xi_cordi = [0,0];
+
+%% Displacement gradient
+
+H = Displacement_Gradient_cal( ...
+    ShapeFun_derivative,xi_cordi,x_cap,q);
+
+%% Deformation gradient
+
+F = Deformation_Gradient_cal(H);
+
+%% Deformation Jacobian
+% J = det(F)
+
+J_deformation = Deformation_Jacobian_cal(F);
+
+%% Infinitesimal strain
+
+[epsilon,epsilon_vec] = ...
+    Infinitesimal_Strain_cal(H);
+
+%% Green-Lagrange strain
+
+[E_GL,E_GL_vec] = ...
+    Green_Lagrange_Strain_cal(H);
+
+%% Display results
+
+disp('Prescribed nodal displacement vector q = ');
+disp(q);
+
+disp('Current nodal coordinates = ');
+disp(Current_Nodal_Locations);
+
+disp('Displacement gradient H = ');
+disp(H);
+
+disp('Deformation gradient F = ');
+disp(F);
+
+disp('Deformation Jacobian J = det(F) = ');
+disp(J_deformation);
+
+disp('Infinitesimal strain tensor = ');
+disp(epsilon);
+
+disp('Infinitesimal strain vector = ');
+disp(epsilon_vec);
+
+disp('Green-Lagrange strain tensor = ');
+disp(E_GL);
+
+disp('Green-Lagrange strain vector = ');
+disp(E_GL_vec);

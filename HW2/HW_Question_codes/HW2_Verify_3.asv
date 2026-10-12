@@ -1,0 +1,412 @@
+%% ================================================================
+% MECH 6140 - HW2
+% VERIFY 3 - Internal Force Energy Derivative Check
+% ================================================================
+
+clear;
+clc;
+
+format short g;
+
+
+%% ================================================================
+% Inputs
+% ================================================================
+
+Nodal_Locations = [ ...
+    0 0;
+    2 0;
+    2 1;
+    0 1];
+
+Youngs_Modulus = 70000;
+
+Poissons_Ratio = 0.30;
+
+thickness = 1;
+
+
+lambda_L = ...
+    (Youngs_Modulus*Poissons_Ratio) / ...
+    ((1+Poissons_Ratio)*(1-2*Poissons_Ratio));
+
+mu = ...
+    Youngs_Modulus / ...
+    (2*(1+Poissons_Ratio));
+
+
+ShapeFun_derivative = ...
+    @Derivative_Of_ShapeFun_4Noded;
+
+
+%% ================================================================
+% Case (c) - Homogeneous stretch
+%
+% Desired:
+%
+% F = [1.2   0
+%       0   0.9]
+%
+% Therefore:
+%
+% u =  0.2 X
+% v = -0.1 Y
+% ================================================================
+
+u = @(X,Y)  0.2*X;
+
+v = @(X,Y) -0.1*Y;
+
+
+%% ================================================================
+% Prescribed nodal displacement vector
+% ================================================================
+
+q = ...
+    Prescribed_Nodal_Displacements_cal( ...
+    Nodal_Locations, ...
+    u,v);
+
+
+%% ================================================================
+% Reference nodal coordinates
+% ================================================================
+
+x_cap = ...
+    X_2_to_X_1converter( ...
+    Nodal_Locations);
+
+
+%% ================================================================
+% Gauss integration points
+% ================================================================
+
+[Gauss_location,Weight] = ...
+    gauss_location_weight(2);
+
+
+%% ================================================================
+% Direct internal force calculation
+%
+% fint = sum( B' S_vec dV0 )
+% ================================================================
+
+Internal_Force = ...
+    zeros(8,1);
+
+
+for i = 1:2
+
+    for j = 1:2
+
+        %% Gauss point
+
+        xi_cordi = [ ...
+            Gauss_location(i), ...
+            Gauss_location(j)];
+
+        Gauss_Weight = ...
+            Weight(i)*Weight(j);
+
+
+        %% Displacement gradient
+
+        H = ...
+            Displacement_Gradient_cal( ...
+            ShapeFun_derivative, ...
+            xi_cordi, ...
+            x_cap, ...
+            q);
+
+
+        %% Deformation gradient
+
+        F = ...
+            Deformation_Gradient_cal(H);
+
+
+        %% Green-Lagrange strain
+
+        [E_GL,~] = ...
+            Green_Lagrange_Strain_cal(H);
+
+
+        %% Second Piola-Kirchhoff stress
+
+        S = ...
+            Second_Piola_Kirchhoff_Stress_cal( ...
+            E_GL, ...
+            lambda_L, ...
+            mu);
+
+
+        %% Nonlinear B matrix
+
+        B = ...
+            Nonlinear_B_Matrix_cal( ...
+            ShapeFun_derivative, ...
+            xi_cordi, ...
+            x_cap, ...
+            F);
+
+
+        %% Internal force contribution
+
+        f_int_GP = ...
+            Internal_Force_GP_cal( ...
+            B, ...
+            S, ...
+            ShapeFun_derivative, ...
+            xi_cordi, ...
+            x_cap, ...
+            Gauss_Weight, ...
+            thickness);
+
+
+        %% Add contribution
+
+        Internal_Force = ...
+            Internal_Force ...
+            + f_int_GP;
+
+    end
+
+end
+
+
+%% ================================================================
+% Perturbation sizes
+% ================================================================
+
+h_values = ...
+    logspace(-2,-10,20);
+
+number_h = ...
+    length(h_values);
+
+
+f_int_numerical = ...
+    zeros(8,number_h);
+
+Relative_Error = ...
+    zeros(number_h,1);
+
+
+%% ================================================================
+% Numerical differentiation of total strain energy
+%
+% fint_j =
+%
+% U(q + h e_j) - U(q - h e_j)
+% --------------------------------
+%               2h
+% ================================================================
+
+for k = 1:number_h
+
+    h = ...
+        h_values(k);
+
+
+    for DOF = 1:8
+
+
+        %% --------------------------------------------------------
+        % Perturbed displacement vectors
+        % ---------------------------------------------------------
+
+        q_plus = ...
+            q;
+
+        q_minus = ...
+            q;
+
+
+        q_plus(DOF) = ...
+            q_plus(DOF) + h;
+
+        q_minus(DOF) = ...
+            q_minus(DOF) - h;
+
+
+        %% --------------------------------------------------------
+        % Total strain energy
+        % ---------------------------------------------------------
+
+        U_plus = ...
+            Total_Strain_Energy_cal( ...
+            q_plus, ...
+            Nodal_Locations, ...
+            ShapeFun_derivative, ...
+            lambda_L, ...
+            mu, ...
+            thickness);
+
+
+        U_minus = ...
+            Total_Strain_Energy_cal( ...
+            q_minus, ...
+            Nodal_Locations, ...
+            ShapeFun_derivative, ...
+            lambda_L, ...
+            mu, ...
+            thickness);
+
+
+        %% --------------------------------------------------------
+        % Numerical internal force
+        % ---------------------------------------------------------
+
+        f_int_numerical(DOF,k) = ...
+            (U_plus-U_minus) ...
+            /(2*h);
+
+    end
+
+
+    %% ============================================================
+    % Relative error
+    %
+    % Relative error for every force component,
+    % then take the maximum
+    % ============================================================
+
+    Component_Relative_Error = ...
+        abs( ...
+        (f_int_numerical(:,k) - Internal_Force) ...
+        ./ Internal_Force);
+
+
+    Relative_Error(k) = ...
+        max(Component_Relative_Error);
+
+end
+
+
+%% ================================================================
+% Results table
+% ================================================================
+
+Verify3_Results = ...
+    table( ...
+    h_values.', ...
+    Relative_Error, ...
+    'VariableNames',{ ...
+    'h', ...
+    'Relative_Error'});
+
+
+disp(' ');
+disp('================================================');
+disp('VERIFY 3 - ENERGY DERIVATIVE CHECK');
+disp('================================================');
+
+disp(Verify3_Results);
+
+
+%% ================================================================
+% Find best perturbation size
+% ================================================================
+
+[Minimum_Relative_Error,best_index] = ...
+    min(Relative_Error);
+
+best_h = ...
+    h_values(best_index);
+
+
+fprintf('\nBest h = %.6e\n',best_h);
+
+fprintf( ...
+    'Minimum relative error = %.6e\n', ...
+    Minimum_Relative_Error);
+
+
+%% ================================================================
+% Force comparison at best h
+% ================================================================
+
+DOF = ...
+    (1:8).';
+
+Direct_Internal_Force = ...
+    Internal_Force;
+
+Numerical_Internal_Force = ...
+    f_int_numerical(:,best_index);
+
+Difference = ...
+    Numerical_Internal_Force ...
+    - Direct_Internal_Force;
+
+
+Force_Comparison = table( ...
+    DOF, ...
+    Direct_Internal_Force, ...
+    Numerical_Internal_Force, ...
+    Difference);
+
+
+disp(' ');
+disp('================================================');
+disp('INTERNAL FORCE COMPARISON AT BEST h');
+disp('================================================');
+
+disp(Force_Comparison);
+
+
+%% ================================================================
+% Relative error plot
+% ================================================================
+
+figure;
+
+loglog( ...
+    h_values, ...
+    Relative_Error, ...
+    'o-', ...
+    'LineWidth',1.5, ...
+    'MarkerSize',6);
+
+xlabel('Perturbation Size, h');
+
+ylabel('Relative Error');
+
+title( ...
+    'Relative Difference b/w Internal Force Energy-Derivative Check', ...
+    'FontWeight','normal');
+
+grid on;
+box on;
+
+
+%% ================================================================
+% Export results to Excel
+% ================================================================
+
+Excel_File = ...
+    'HW2_Verify3_EnergyDerivative.xlsx';
+
+
+if isfile(Excel_File)
+
+    delete(Excel_File);
+
+end
+
+
+writetable( ...
+    Verify3_Results, ...
+    Excel_File, ...
+    'Sheet', ...
+    'Relative Error');
+
+
+writetable( ...
+    Force_Comparison, ...
+    Excel_File, ...
+    'Sheet', ...
+    'Force Comparison');
+
+
+fprintf('\nResults saved to:\n%s\n',Excel_File);
